@@ -1,0 +1,71 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// Configuración de la pantalla LCD 16x2 con dirección I2C (suele ser 0x27 o 0x3F)
+// Pines I2C estándar del ESP32: SDA = 21, SCL = 22
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Dirección I2C del sensor MPU6050
+const int MPU_addr = 0x68; 
+
+void setup() {
+  // Inicializar comunicación Serial para el Monitor Serie a 115200 baudios
+  Serial.begin(115200);
+  
+  // Inicializar comunicación I2C en los pines del ESP32 (SDA=21, SCL=22)
+  Wire.begin(21, 22);
+  
+  // Despertar el MPU6050
+  Wire.beginTransmission(MPU_addr);
+  Wire.write(0x6B); 
+  Wire.write(0);    
+  Wire.endTransmission(true);
+
+  // Inicializar la pantalla LCD
+  lcd.init();                      
+  lcd.backlight();
+  
+  // Mensaje de bienvenida
+  lcd.setCursor(0, 0);
+  lcd.print("ESP32 - MEMS");
+  lcd.setCursor(0, 1);
+  lcd.print("Iniciando...");
+  delay(2000);
+  lcd.clear();
+}
+
+void loop() {
+  // Solicitar los registros de aceleración del MPU6050 (comienzan en 0x3B)
+  Wire.beginTransmission(MPU_addr);
+  Wire.write(0x3B); 
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU_addr, 6, true);
+
+  // Leer los valores de aceleración en los ejes X, Y y Z
+  int16_t AcX = Wire.read() << 8 | Wire.read();
+  int16_t AcY = Wire.read() << 8 | Wire.read();
+  int16_t AcZ = Wire.read() << 8 | Wire.read();
+
+  // Calcular el ángulo utilizando la gravedad terrestre como referencia (ejes Y y Z)
+  float angle = atan2((float)AcY, (float)AcZ) * 180.0 / PI;
+
+  // Ajustar el rango de -180° a 180° para cubrir un intervalo completo de 0° a 360°
+  if (angle < 0) {
+    angle += 360.0;
+  }
+
+  // 1. Enviar el valor del ángulo al Monitor Serie del computador
+  Serial.print("Angulo Actual: ");
+  Serial.print(angle, 1);
+  Serial.println(" deg");
+
+  // 2. Mostrar el resultado simultáneamente en la pantalla LCD 16x2
+  lcd.setCursor(0, 0);
+  lcd.print("Posicion Disco: ");
+  
+  lcd.setCursor(0, 1);
+  lcd.print(angle, 1); // Muestra el ángulo con 1 decimal
+  lcd.print(" Grados   ");
+
+  delay(200); // Retardo para estabilidad visual
+}
