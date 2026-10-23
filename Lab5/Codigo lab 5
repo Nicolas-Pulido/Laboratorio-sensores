@@ -1,0 +1,114 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// Configuración de la pantalla LCD I2C (0x27, 16 columnas, 2 filas)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// --- PINES ---
+const int sdaPin  = 21;   // LCD SDA
+
+int pasa=0;
+
+const int sclPin  = 22;   // LCD SCL
+
+const int hallPin = 4;    // Sensor Hall analógico en GPIO 4
+const int potPin  = 2;    // Potenciómetro de velocidad en GPIO 2
+
+const int enaPin  = 19;   // L298N PWM (Enable A)
+const int in1Pin  = 18;   // L298N IN1
+const int in2Pin  = 23;    // L298N IN2 (Mantenido igual)
+
+// Parámetros PWM para Core ESP32 v3.x
+const int pwmFreq       = 5000;    // 5 kHz
+const int pwmResolution = 8;       // Resolución de 0 a 255
+
+// Variables de medición de RPM y Sensor Hall (Rango 2.54V - 3.3V)
+unsigned long lastTime = 0;
+unsigned long interval = 0;
+bool pulseDetected = false;
+
+// Umbral calculado para 2.54V (con ADC de 12 bits y 3.3V max -> 4095)
+// Fórmula: (2.54 / 3.3) * 4095 ≈ 3151
+const int hallThreshold = 3151; 
+bool lastState = false;
+float rpm = 0.0;
+
+void setup() {
+  Serial.begin(115200);
+
+  // Inicializar bus I2C en frecuencia estable (100kHz)
+  Wire.begin(sdaPin, sclPin);
+  Wire.setClock(100000); 
+  
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+
+  // Configuración de pines para el L298N
+  pinMode(in1Pin, OUTPUT);
+  pinMode(in2Pin, OUTPUT);
+  
+  // Configuración PWM moderna (ESP32 Core v3.x)
+  ledcAttach(enaPin, pwmFreq, pwmResolution);
+
+  // Sentido de giro (Adelante)
+  digitalWrite(in1Pin, HIGH);
+  digitalWrite(in2Pin, LOW);
+
+  // Atenuación del ADC para leer de 0V a 3.3V
+  analogSetAttenuation(ADC_11db);
+
+  lcd.setCursor(0, 0);
+  lcd.print("Pines L298N OK  ");
+  lcd.setCursor(0, 1);
+  lcd.print("Hall 2.54V-3.3V ");
+  delay(2000);
+  lcd.clear();
+}
+
+void loop() {
+  // 1. Lectura del potenciómetro y control del motor por PWM
+  int potValue = analogRead(potPin); 
+  int motorSpeed = map(potValue, 0, 4095, 0, 255); 
+  ledcWrite(enaPin, motorSpeed);
+
+  // 2. Lectura del sensor Hall analógico adaptado al rango 2.54V - 3.3V
+  int hallValue = analogRead(hallPin);
+  bool currentState = (hallValue > hallThreshold);
+  
+  if (currentState && !lastState) {
+    unsigned long currentTime = micros();
+    if (lastTime > 0) {
+      interval = currentTime - lastTime;
+      pasa++;
+      if (interval > 5000) { // Filtro anti-rebote (5ms)
+        pulseDetected = true;
+        lastTime = currentTime;
+      }
+    } else {
+      lastTime = currentTime;
+    }
+  }
+  lastState = currentState;
+
+  if (pulseDetected && interval > 0) {
+    rpm = (60.0 * 1000000.0) / (float)interval;
+    pulseDetected = false;
+  } else {
+    if (micros() - lastTime > 1000000UL) {
+      rpm = 0.0;
+    }
+  }
+
+  // 3. Despliegue en la Pantalla LCD
+  lcd.setCursor(0, 0);
+  lcd.print("RPM: ");
+  lcd.print(rpm, 1);
+  lcd.print("      ");
+
+  int speedPercent = map(motorSpeed, 0, 255, 0, 100);
+  lcd.setCursor(0, 1);
+  lcd.print("paso: ");
+  lcd.print(pasa);
+  lcd.print(" veces  ");
+}
