@@ -1,0 +1,538 @@
+clc;
+clear;
+close all;
+
+%% =========================================================
+% DATOS DE CARACTERIZACIÓN - PRIMERA TOMA (IDA)
+% =========================================================
+
+% Distancia teórica en cm
+D_ida = [1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 ...
+         16 17 18 19 20 21 22 23 24 25 26 27 28 29 30];
+
+% Distancia experimental en cm
+Dexp_ida = [2.05172414 2.05172414 3.25862069 4.03448276 ...
+            4.98275862 6.36206897 7.27586207 8.10344828 ...
+            9.53448276 10.0172414 11.0344828 12.1206897 ...
+            12.9482759 14.5689655 15.1034483 16.1896552 ...
+            17.0862069 18.1724138 19.0689655 20.3793103 ...
+            21.1034483 22 23.4310345 24.1551724 ...
+            25.4655172 26.6034483 27.0862069 28.2931034 ...
+            29.362069 30.137931];
+
+% Error porcentual
+Error_ida = [105.172414 2.5862069 8.62068966 0.86206897 ...
+             0.34482759 6.03448276 3.9408867 1.29310345 ...
+             5.93869732 0.17241379 0.31347962 1.00574713 ...
+             0.39787798 4.06403941 0.68965517 1.18534483 ...
+             0.50709939 0.95785441 0.36297641 1.89655172 ...
+             0.49261084 0 1.87406297 0.64655172 ...
+             1.86206897 2.32095491 0.3192848 1.04679803 ...
+             1.24851367 0.45977011];
+
+%% =========================================================
+% DATOS DE HISTÉRESIS - SEGUNDA TOMA (REGRESO)
+% =========================================================
+
+D_regreso = [30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 ...
+             15 14 13 12 11 10 9 8 7 6 5 4 3 2 1];
+
+Dexp_regreso = [31.1034483 29.6551724 28.1034483 27.2586207 ...
+                26.1206897 25.1034483 23.6206897 23.1896552 ...
+                21.8793103 21.4482759 20.5 19 17.9827586 ...
+                16.7758621 16.137931 15.2931034 14.3275862 ...
+                13.3103448 12.1206897 10.7931034 10.0172414 ...
+                9.29310345 8.22413793 6.96551724 6 ...
+                4.93103448 4.10344828 3.01724138 ...
+                2.17241379 2.17241379];
+
+Error_regreso = [3.67816092 2.25921522 0.36945813 ...
+                 0.95785441 0.46419098 0.4137931 ...
+                 1.58045977 0.82458771 0.54858934 ...
+                 2.13464696 2.5 0 0.09578544 ...
+                 1.31845842 0.86206897 1.95402299 ...
+                 2.33990148 2.3872679 1.00574713 ...
+                 1.88087774 0.17241379 3.25670498 ...
+                 2.80172414 0.49261084 0 ...
+                 1.37931034 2.5862069 0.57471264 ...
+                 8.62068966 117.241379];
+
+%% =========================================================
+% ORDENAR DATOS DE REGRESO
+% =========================================================
+
+% Se ordenan de menor a mayor distancia para facilitar
+% la comparación y la regresión.
+
+[D_regreso_ordenado,indice_regreso] = sort(D_regreso);
+
+D_regreso_ordenado_exp = Dexp_regreso(indice_regreso);
+
+%% =========================================================
+% REGRESIÓN LINEAL - PRIMERA TOMA
+% =========================================================
+
+p_ida = polyfit(D_ida,Dexp_ida,1);
+
+Dlinea_ida = linspace(min(D_ida),max(D_ida),200);
+
+Dlinea_exp_ida = polyval(p_ida,Dlinea_ida);
+
+% Valores calculados por la regresión
+Dcalculado_ida = polyval(p_ida,D_ida);
+
+% R²
+SSres_ida = sum((Dexp_ida - Dcalculado_ida).^2);
+
+SStot_ida = sum((Dexp_ida - mean(Dexp_ida)).^2);
+
+R2_ida = 1 - SSres_ida/SStot_ida;
+
+% Sensibilidad
+Sensibilidad_ida = p_ida(1);
+
+%% =========================================================
+% REGRESIÓN LINEAL - SEGUNDA TOMA
+% =========================================================
+
+p_regreso = polyfit(D_regreso_ordenado, ...
+                    D_regreso_ordenado_exp,1);
+
+Dlinea_regreso = linspace(min(D_regreso_ordenado), ...
+                          max(D_regreso_ordenado),200);
+
+Dlinea_exp_regreso = polyval(p_regreso,Dlinea_regreso);
+
+% Valores calculados por la regresión
+Dcalculado_regreso = polyval(p_regreso,D_regreso_ordenado);
+
+% R²
+SSres_regreso = sum((D_regreso_ordenado_exp - ...
+                     Dcalculado_regreso).^2);
+
+SStot_regreso = sum((D_regreso_ordenado_exp - ...
+                     mean(D_regreso_ordenado_exp)).^2);
+
+R2_regreso = 1 - SSres_regreso/SStot_regreso;
+
+% Sensibilidad
+Sensibilidad_regreso = p_regreso(1);
+
+%% =========================================================
+% CÁLCULO DE HISTÉRESIS
+% =========================================================
+
+% Distancias comunes entre ida y regreso
+
+D_comun = intersect(D_ida,D_regreso);
+
+% Vectores para almacenar las mediciones correspondientes
+
+D_ida_histeresis = zeros(size(D_comun));
+
+D_regreso_histeresis = zeros(size(D_comun));
+
+%% Buscar las mediciones correspondientes a cada distancia
+
+for i = 1:length(D_comun)
+
+    indice_ida = find(D_ida == D_comun(i),1);
+
+    indice_regreso = find(D_regreso == D_comun(i),1);
+
+    D_ida_histeresis(i) = Dexp_ida(indice_ida);
+
+    D_regreso_histeresis(i) = Dexp_regreso(indice_regreso);
+
+end
+
+%% =========================================================
+% DIFERENCIA DE DISTANCIA - HISTÉRESIS
+% =========================================================
+
+Histeresis_cm = abs(D_regreso_histeresis - D_ida_histeresis);
+
+% Histéresis máxima
+[Hmax,indice_Hmax] = max(Histeresis_cm);
+
+% Datos correspondientes
+D_Hmax = D_comun(indice_Hmax);
+
+D_ida_Hmax = D_ida_histeresis(indice_Hmax);
+
+D_regreso_Hmax = D_regreso_histeresis(indice_Hmax);
+
+%% =========================================================
+% HISTÉRESIS PROMEDIO
+% =========================================================
+
+Hpromedio = mean(Histeresis_cm);
+
+%% =========================================================
+% RANGO DE SALIDA
+% =========================================================
+
+Dmax = max([Dexp_ida Dexp_regreso]);
+
+Dmin = min([Dexp_ida Dexp_regreso]);
+
+RangoD = Dmax - Dmin;
+
+%% =========================================================
+% HISTÉRESIS RELATIVA AL FONDO DE ESCALA
+% =========================================================
+
+Hmax_porcentaje = (Hmax/RangoD)*100;
+
+Hpromedio_porcentaje = (Hpromedio/RangoD)*100;
+
+%% =========================================================
+% ERROR PROMEDIO - PRIMERA TOMA
+% =========================================================
+
+Error_promedio_ida = mean(Error_ida);
+
+[Error_max_ida,indice_Error_ida] = max(Error_ida);
+
+D_Error_max_ida = D_ida(indice_Error_ida);
+
+Dexp_Error_max_ida = Dexp_ida(indice_Error_ida);
+
+%% =========================================================
+% ERROR PROMEDIO - SEGUNDA TOMA
+% =========================================================
+
+Error_promedio_regreso = mean(Error_regreso);
+
+[Error_max_regreso,indice_Error_regreso] = max(Error_regreso);
+
+D_Error_max_regreso = D_regreso(indice_Error_regreso);
+
+Dexp_Error_max_regreso = Dexp_regreso(indice_Error_regreso);
+
+%% =========================================================
+% ERROR PROMEDIO GENERAL
+% =========================================================
+
+Error_promedio_general = mean([Error_ida Error_regreso]);
+
+%% =========================================================
+% GRÁFICA DE HISTÉRESIS
+% =========================================================
+
+figure;
+
+% Datos de primera toma (ida)
+plot(D_ida,Dexp_ida,'bo', ...
+    'MarkerFaceColor','b', ...
+    'MarkerSize',6);
+
+hold on;
+
+% Regresión primera toma
+plot(Dlinea_ida,Dlinea_exp_ida, ...
+    'b-', ...
+    'LineWidth',2);
+
+% Datos de segunda toma (regreso)
+plot(D_regreso_ordenado,D_regreso_ordenado_exp,'gs', ...
+    'MarkerFaceColor','g', ...
+    'MarkerSize',6);
+
+% Regresión segunda toma
+plot(Dlinea_regreso,Dlinea_exp_regreso, ...
+    'g-', ...
+    'LineWidth',2);
+
+%% =========================================================
+% MARCAR HISTÉRESIS MÁXIMA
+% =========================================================
+
+plot([D_Hmax D_Hmax], ...
+     [D_ida_Hmax D_regreso_Hmax], ...
+     'r-', ...
+     'LineWidth',2);
+
+% Punto de ida
+plot(D_Hmax,D_ida_Hmax, ...
+    'ro', ...
+    'MarkerSize',10, ...
+    'LineWidth',2);
+
+% Punto de regreso
+plot(D_Hmax,D_regreso_Hmax, ...
+    'ro', ...
+    'MarkerSize',10, ...
+    'LineWidth',2);
+
+%% =========================================================
+% CONFIGURACIÓN DE LA GRÁFICA
+% =========================================================
+
+grid on;
+
+xlabel('Distancia teórica (cm)');
+
+ylabel('Distancia experimental (cm)');
+
+title('Curva de histéresis del sensor ultrasónico');
+
+legend('Primera toma (ida)', ...
+       'Regresión ida', ...
+       'Segunda toma (regreso)', ...
+       'Regresión regreso', ...
+       'Histéresis máxima', ...
+       'Location','northwest');
+
+xlim([0 32]);
+ylim([0 35]);
+
+%% =========================================================
+% ECUACIONES DE REGRESIÓN
+% =========================================================
+
+ecuacion_ida = sprintf( ...
+    ['Primera toma (ida):\n' ...
+     'y = %.6fx %+.6f\n' ...
+     'R^2 = %.6f\n' ...
+     'Sensibilidad = %.6f cm/cm'], ...
+     p_ida(1),p_ida(2),R2_ida,Sensibilidad_ida);
+
+ecuacion_regreso = sprintf( ...
+    ['Segunda toma (regreso):\n' ...
+     'y = %.6fx %+.6f\n' ...
+     'R^2 = %.6f\n' ...
+     'Sensibilidad = %.6f cm/cm'], ...
+     p_regreso(1),p_regreso(2),R2_regreso,Sensibilidad_regreso);
+
+%% =========================================================
+% CUADRO REGRESIÓN IDA
+% =========================================================
+
+text(1,34,ecuacion_ida, ...
+     'FontSize',8, ...
+     'Color','black', ...
+     'BackgroundColor','white', ...
+     'EdgeColor','black');
+
+%% =========================================================
+% CUADRO REGRESIÓN REGRESO
+% =========================================================
+
+text(1,29,ecuacion_regreso, ...
+     'FontSize',8, ...
+     'Color','black', ...
+     'BackgroundColor','white', ...
+     'EdgeColor','black');
+
+%% =========================================================
+% CUADRO HISTÉRESIS MÁXIMA
+% =========================================================
+
+texto_Hmax = sprintf( ...
+    ['Histéresis máxima = %.4f cm\n' ...
+     'Distancia teórica = %.0f cm\n' ...
+     'Ida = %.4f cm\n' ...
+     'Regreso = %.4f cm'], ...
+     Hmax,D_Hmax,D_ida_Hmax,D_regreso_Hmax);
+
+text(18,12, ...
+     texto_Hmax, ...
+     'FontSize',8, ...
+     'Color','black', ...
+     'BackgroundColor','white', ...
+     'EdgeColor','black');
+
+%% =========================================================
+% CUADRO HISTÉRESIS PROMEDIO
+% =========================================================
+
+texto_Hpromedio = sprintf( ...
+    ['Histéresis promedio = %.4f cm\n' ...
+     'Histéresis máxima relativa = %.2f %%\n' ...
+     'Histéresis promedio relativa = %.2f %%'], ...
+     Hpromedio,Hmax_porcentaje,Hpromedio_porcentaje);
+
+text(18,7, ...
+     texto_Hpromedio, ...
+     'FontSize',8, ...
+     'Color','black', ...
+     'BackgroundColor','white', ...
+     'EdgeColor','black');
+
+%% =========================================================
+% CUADRO DE ERROR
+% =========================================================
+
+texto_error = sprintf( ...
+    ['Error promedio general = %.2f %%\n' ...
+     'Mayor error ida = %.2f %%\n' ...
+     'Mayor error regreso = %.2f %%'], ...
+     Error_promedio_general, ...
+     Error_max_ida, ...
+     Error_max_regreso);
+
+text(18,2, ...
+     texto_error, ...
+     'FontSize',8, ...
+     'Color','black', ...
+     'BackgroundColor','white', ...
+     'EdgeColor','black');
+
+hold off;
+
+%% =========================================================
+% RESULTADOS EN COMMAND WINDOW
+% =========================================================
+
+fprintf('\n');
+fprintf('====================================================\n');
+fprintf('          CARACTERIZACIÓN DEL SENSOR ULTRASÓNICO\n');
+fprintf('                       HISTÉRESIS\n');
+fprintf('====================================================\n');
+
+%% ---------------------------------------------------------
+% REGRESIÓN DE PRIMERA TOMA
+% ---------------------------------------------------------
+
+fprintf('\n====================================================\n');
+fprintf('                 REGRESIÓN - IDA\n');
+fprintf('====================================================\n');
+
+fprintf('Ecuación: y = %.6f x %+.6f\n', ...
+        p_ida(1),p_ida(2));
+
+fprintf('Sensibilidad = %.6f cm/cm\n', ...
+        Sensibilidad_ida);
+
+fprintf('Intercepto = %.6f cm\n', ...
+        p_ida(2));
+
+fprintf('R^2 = %.6f\n', ...
+        R2_ida);
+
+%% ---------------------------------------------------------
+% REGRESIÓN DE SEGUNDA TOMA
+% ---------------------------------------------------------
+
+fprintf('\n====================================================\n');
+fprintf('                REGRESIÓN - REGRESO\n');
+fprintf('====================================================\n');
+
+fprintf('Ecuación: y = %.6f x %+.6f\n', ...
+        p_regreso(1),p_regreso(2));
+
+fprintf('Sensibilidad = %.6f cm/cm\n', ...
+        Sensibilidad_regreso);
+
+fprintf('Intercepto = %.6f cm\n', ...
+        p_regreso(2));
+
+fprintf('R^2 = %.6f\n', ...
+        R2_regreso);
+
+%% ---------------------------------------------------------
+% HISTÉRESIS
+% ---------------------------------------------------------
+
+fprintf('\n====================================================\n');
+fprintf('                    HISTÉRESIS\n');
+fprintf('====================================================\n');
+
+fprintf('Histéresis máxima = %.4f cm\n', ...
+        Hmax);
+
+fprintf('Distancia donde ocurre = %.0f cm\n', ...
+        D_Hmax);
+
+fprintf('Medición ida = %.4f cm\n', ...
+        D_ida_Hmax);
+
+fprintf('Medición regreso = %.4f cm\n', ...
+        D_regreso_Hmax);
+
+fprintf('Rango de salida = %.4f cm\n', ...
+        RangoD);
+
+fprintf('Histéresis máxima relativa = %.2f %%\n', ...
+        Hmax_porcentaje);
+
+fprintf('Histéresis promedio = %.4f cm\n', ...
+        Hpromedio);
+
+fprintf('Histéresis promedio relativa = %.2f %%\n', ...
+        Hpromedio_porcentaje);
+
+%% ---------------------------------------------------------
+% ERROR - PRIMERA TOMA
+% ---------------------------------------------------------
+
+fprintf('\n====================================================\n');
+fprintf('                    ERROR - IDA\n');
+fprintf('====================================================\n');
+
+fprintf('Error promedio = %.2f %%\n', ...
+        Error_promedio_ida);
+
+fprintf('Mayor error = %.2f %%\n', ...
+        Error_max_ida);
+
+fprintf('Distancia del mayor error = %.0f cm\n', ...
+        D_Error_max_ida);
+
+fprintf('Distancia experimental = %.4f cm\n', ...
+        Dexp_Error_max_ida);
+
+%% ---------------------------------------------------------
+% ERROR - SEGUNDA TOMA
+% ---------------------------------------------------------
+
+fprintf('\n====================================================\n');
+fprintf('                  ERROR - REGRESO\n');
+fprintf('====================================================\n');
+
+fprintf('Error promedio = %.2f %%\n', ...
+        Error_promedio_regreso);
+
+fprintf('Mayor error = %.2f %%\n', ...
+        Error_max_regreso);
+
+fprintf('Distancia del mayor error = %.0f cm\n', ...
+        D_Error_max_regreso);
+
+fprintf('Distancia experimental = %.4f cm\n', ...
+        Dexp_Error_max_regreso);
+
+%% ---------------------------------------------------------
+% ERROR GENERAL
+% ---------------------------------------------------------
+
+fprintf('\n====================================================\n');
+fprintf('                  ERROR GENERAL\n');
+fprintf('====================================================\n');
+
+fprintf('Error promedio general = %.2f %%\n', ...
+        Error_promedio_general);
+
+%% ---------------------------------------------------------
+% HISTÉRESIS PUNTO POR PUNTO
+% ---------------------------------------------------------
+
+fprintf('\n====================================================\n');
+fprintf('             HISTÉRESIS PUNTO A PUNTO\n');
+fprintf('====================================================\n');
+
+for i = 1:length(D_comun)
+
+    fprintf(['D = %.0f cm   Ida = %.4f cm   ' ...
+             'Regreso = %.4f cm   H = %.4f cm\n'], ...
+             D_comun(i), ...
+             D_ida_histeresis(i), ...
+             D_regreso_histeresis(i), ...
+             Histeresis_cm(i));
+
+end
+
+fprintf('\n====================================================\n');
+fprintf('                       FIN\n');
+fprintf('====================================================\n');
