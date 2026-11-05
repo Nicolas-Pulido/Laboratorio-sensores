@@ -1,0 +1,287 @@
+clc;
+clear;
+close all;
+
+%% ==========================================
+% DATOS EXPERIMENTALES
+% SENSOR OPTICO GP2Y0A41SK0F
+% ==========================================
+
+Distancia = 1:30;
+
+Voltajes = [1.85 1.34 2.75 2.9 3.14 3.14 3.14 3.13 ...
+            3.03 2.76 2.48 2.23 2.02 1.19 1.02 0.53 ...
+            0.36 0.26 0.24 0.22 0.20 0.19 0.18 0.18 ...
+            0.17 0.17 0.17 0.17 0.17 0.16];
+
+%% ==========================================
+% DATOS TEORICOS
+% DATASHEET SHARP GP2Y0A41SK0F
+% CURVA PAPEL BLANCO (90%)
+% DIGITALIZACION APROXIMADA
+% ==========================================
+
+T = 4:30;
+
+Vteorico = [2.75 2.35 2.02 1.78 1.56 1.40 1.26 ...
+            1.15 1.06 0.99 0.92 0.86 0.81 0.77 ...
+            0.73 0.69 0.65 0.62 0.59 0.56 0.54 ...
+            0.52 0.50 0.48 0.46 0.44 0.42];
+
+% Seleccion de datos experimentales
+Vexp = Voltajes(4:30);
+
+%% ==========================================
+% REGRESION POLINOMICA EXPERIMENTAL
+% ==========================================
+
+p_exp = polyfit(T,Vexp,2);
+
+Tlineal = linspace(min(T),max(T),300);
+
+Vlineal_exp = polyval(p_exp,Tlineal);
+
+% R2 experimental
+Vexp_calculado = polyval(p_exp,T);
+
+SSres_exp = sum((Vexp - Vexp_calculado).^2);
+SStot_exp = sum((Vexp - mean(Vexp)).^2);
+
+R2_exp = 1 - SSres_exp/SStot_exp;
+
+%% ==========================================
+% REGRESION POLINOMICA TEORICA
+% ==========================================
+
+p_teorico = polyfit(T,Vteorico,2);
+
+Vlineal_teorico = polyval(p_teorico,Tlineal);
+
+% R2 teorico
+Vteorico_calculado = polyval(p_teorico,T);
+
+SSres_teorico = sum((Vteorico - Vteorico_calculado).^2);
+SStot_teorico = sum((Vteorico - mean(Vteorico)).^2);
+
+R2_teorico = 1 - SSres_teorico/SStot_teorico;
+
+%% ==========================================
+% ERROR PORCENTUAL
+% ==========================================
+
+Error = abs((Vexp - Vteorico)./Vteorico)*100;
+
+Error(Vteorico == 0) = 0;
+
+% Error promedio
+Error_promedio = mean(Error);
+
+% Mayor error
+[Error_max,indice_max] = max(Error);
+
+% Datos del mayor error
+T_max_error = T(indice_max);
+
+Vexp_max_error = Vexp(indice_max);
+
+Vteorico_max_error = Vteorico(indice_max);
+
+%% ==========================================
+% GRAFICA
+% ==========================================
+
+figure;
+
+% Datos experimentales
+plot(T,Vexp,'bo', ...
+    'MarkerFaceColor','b', ...
+    'MarkerSize',6);
+
+hold on;
+
+% Regresion experimental
+plot(Tlineal,Vlineal_exp, ...
+    'b-', ...
+    'LineWidth',2);
+
+% Datos teoricos
+plot(T,Vteorico,'gs', ...
+    'MarkerFaceColor','g', ...
+    'MarkerSize',5);
+
+% Regresion teorica
+plot(Tlineal,Vlineal_teorico, ...
+    'g-', ...
+    'LineWidth',2);
+
+%% ==========================================
+% MARCAR PUNTO CON MAYOR ERROR
+% ==========================================
+
+plot(T_max_error,Vexp_max_error, ...
+    'ro', ...
+    'MarkerSize',10, ...
+    'LineWidth',2);
+
+% Linea vertical del mayor error
+plot([T_max_error T_max_error], ...
+     [Vexp_max_error Vteorico_max_error], ...
+     'r-', ...
+     'LineWidth',1.5);
+
+%% ==========================================
+% CONFIGURACION DE LA GRAFICA
+% ==========================================
+
+grid on;
+box on;
+
+xlabel('Distancia Teorica (cm)');
+ylabel('Voltaje de salida (V)');
+
+title('Caracterizacion del Sensor Optico GP2Y0A41SK0F');
+
+xlim([3 31]);
+ylim([-1 3.6]);
+
+legend('Datos experimentales', ...
+       'Regresion experimental', ...
+       'Datos teoricos (Datasheet)', ...
+       'Regresion teorica', ...
+       'Mayor error', ...
+       'Location','northeast');
+
+%% ==========================================
+% ECUACIONES
+% ==========================================
+
+ecuacion_exp = sprintf( ...
+    'Experimental:\ny = %.5fx^2 %+.5fx %+.5f\nR^2 = %.5f', ...
+    p_exp(1),p_exp(2),p_exp(3),R2_exp);
+
+ecuacion_teorica = sprintf( ...
+    'Teorico:\ny = %.5fx^2 %+.5fx %+.5f\nR^2 = %.5f', ...
+    p_teorico(1),p_teorico(2),p_teorico(3),R2_teorico);
+
+%% ==========================================
+% POSICIONES DE LOS CUADROS
+% ==========================================
+
+x_texto = 17;
+
+% Error promedio
+y_texto_promedio = 1.65;
+
+% Regresion experimental
+y_texto_exp = 2.5;
+
+% Regresion teorica
+y_texto_teorico = 3.5;
+
+% Mayor error
+y_texto_error = -0.5;
+
+%% ==========================================
+% CUADRO ERROR PROMEDIO
+% ==========================================
+
+texto_promedio = sprintf( ...
+    'Error promedio = %.2f %%', ...
+    Error_promedio);
+
+text(x_texto,y_texto_promedio, ...
+     texto_promedio, ...
+     'FontSize',10, ...
+     'Color','black', ...
+     'BackgroundColor','white', ...
+     'EdgeColor','black');
+
+%% ==========================================
+% CUADRO REGRESION EXPERIMENTAL
+% ==========================================
+
+text(x_texto,y_texto_exp, ...
+     ecuacion_exp, ...
+     'FontSize',9, ...
+     'Color','black', ...
+     'BackgroundColor','white', ...
+     'EdgeColor','black');
+
+%% ==========================================
+% CUADRO REGRESION TEORICA
+% ==========================================
+
+text(x_texto,y_texto_teorico, ...
+     ecuacion_teorica, ...
+     'FontSize',9, ...
+     'Color','black', ...
+     'BackgroundColor','white', ...
+     'EdgeColor','black');
+
+%% ==========================================
+% CUADRO DEL MAYOR ERROR
+% ==========================================
+
+texto_error = sprintf( ...
+    'Mayor error = %.2f %%\nDistancia = %.0f cm', ...
+    Error_max,T_max_error);
+
+text(x_texto,y_texto_error, ...
+     texto_error, ...
+     'FontSize',9, ...
+     'Color','black', ...
+     'BackgroundColor','white', ...
+     'EdgeColor','black');
+
+hold off;
+
+%% ==========================================
+% RESULTADOS EN COMMAND WINDOW
+% ==========================================
+
+fprintf('\n====================================\n');
+fprintf(' REGRESION EXPERIMENTAL\n');
+fprintf('====================================\n');
+
+fprintf('Ecuacion: y = %.6fx^2 %+.6fx %+.6f\n', ...
+    p_exp(1),p_exp(2),p_exp(3));
+
+fprintf('R2 = %.6f\n',R2_exp);
+
+fprintf('\n====================================\n');
+fprintf(' REGRESION TEORICA - DATASHEET\n');
+fprintf('====================================\n');
+
+fprintf('Ecuacion: y = %.6fx^2 %+.6fx %+.6f\n', ...
+    p_teorico(1),p_teorico(2),p_teorico(3));
+
+fprintf('R2 = %.6f\n',R2_teorico);
+
+fprintf('\n====================================\n');
+fprintf(' MAYOR ERROR\n');
+fprintf('====================================\n');
+
+fprintf('Distancia = %.0f cm\n',T_max_error);
+fprintf('Experimental = %.3f V\n',Vexp_max_error);
+fprintf('Teorico = %.3f V\n',Vteorico_max_error);
+fprintf('Error maximo = %.2f %%\n',Error_max);
+
+fprintf('\n====================================\n');
+fprintf(' ERROR PORCENTUAL\n');
+fprintf('====================================\n');
+
+for i = 1:length(T)
+
+    fprintf(['Distancia = %.0f cm    ' ...
+             'Vexp = %.3f V    ' ...
+             'Vteo = %.3f V    ' ...
+             'Error = %.2f %%\n'], ...
+             T(i),Vexp(i),Vteorico(i),Error(i));
+
+end
+
+fprintf('\nError promedio = %.2f %%\n',Error_promedio);
+
+fprintf('\n====================================\n');
+fprintf(' FIN DE CARACTERIZACION\n');
+fprintf('====================================\n');
