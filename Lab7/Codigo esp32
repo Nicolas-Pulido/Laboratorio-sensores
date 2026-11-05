@@ -1,0 +1,193 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// --- CONFIGURACIÓN DE LA PANTALLA LCD I2C ---
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// --- PINES DE HARDWARE ---
+const int PIN_TRIG   = 5;   // Trigger del HC-SR04
+const int PIN_ECHO   = 18;  // Echo del HC-SR04
+const int PIN_SHARP  = 2;  // Pin analógico ADC1 para el GP2Y0A41SK0F
+const int PIN_BOTON  = 4;   // Pin para el botón de conmutación
+
+// --- PARÁMETROS GEOMÉTRICOS DEL TARRO (CONO TRUNCADO) ---
+const float R1 = 4.4725;      // Radio inferior (cm)
+const float R2 = 5.8300;      // Radio superior (cm)
+const float H_TARRO = 28.7;   // Altura total del tarro (cm)
+const float DISTANCIA_FONDO = 30.5; // cm (Actualizado: nueva distancia al fondo con sensores elevados)
+
+// --- VARIABLES DE ESTADO ---
+enum ModoSensor { MODO_ULTRASONIDO, MODO_INFRARROJO };
+ModoSensor modoActual = MODO_ULTRASONIDO;
+
+bool estadoBotonAnterior = HIGH;
+unsigned long ultimoDebounceTime = 0;
+const unsigned long DEBOUNCE_DELAY = 50; // ms
+
+// --- FUNCIÓN DE CÁLCULO DE VOLUMEN (CONO TRUNCADO) ---
+float calcularVolumenCono(float h) {
+  if (h < 0.0) h = 0.0;
+  if (h > H_TARRO) h = H_TARRO;
+  
+  float r_h = R1 + ((R2 - R1) / H_TARRO) * h;
+  float volBruto = (PI * h / 3.0) * (R1 * R1 + R1 * r_h + r_h * r_h);
+  return round(volBruto / 0.5) * 0.5; // Redondeo a resolución de 0.5 cm³
+}
+
+// --- MEDICIÓN HC-SR04 ---
+void medirHCSR04(float &tiempoMS, float &distanciaCM, float &volumen) {
+  digitalWrite(PIN_TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(PIN_TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(PIN_TRIG, LOW);
+
+  unsigned long tiempoUS = pulseIn(PIN_ECHO, HIGH, 30000); // Timeout 30ms
+
+  if (tiempoUS == 0) {
+    tiempoMS = 0;
+    distanciaCM = 0;
+    volumen = 0;
+  } else {
+    tiempoMS = tiempoUS / 1000.0;
+    distanciaCM = (tiempoUS * 0.0343) / 2.0;
+    float h = DISTANCIA_FONDO - distanciaCM;
+    volumen = calcularVolumenCono(h);
+  }
+}
+// --- MEDICIÓN SHARP GP2Y0A41SK0F ---
+void medirSharp(float &voltaje, float &distanciaCM, float &volumen) {
+  long sumaADC = 0;
+  const int MUESTRAS = 30;
+  for (int i = 0; i < MUESTRAS; i++) {
+    sumaADC += analogRead(PIN_SHARP);
+    delayMicroseconds(500);
+  }
+  float adcPromedio = (float)sumaADC / MUESTRAS;
+  
+  voltaje = adcPromedio * (3.3 / 4095.0);
+  if (voltaje < 0.35) voltaje = 0.35;
+  
+  // Subimos el umbral a 0.66 V para atrapar tus lecturas en vacío (que llegan a 0.655 V)
+  if (voltaje <= 0.66) {
+    distanciaCM = DISTANCIA_FONDO; // 30.5 cm -> Esto hará que el volumen sea exactamente 0
+  } else {
+    distanciaCM = 12.08 * pow(voltaje, -1.058);
+  }
+  
+  float h = DISTANCIA_FONDO - distanciaCM;
+  volumen = calcularVolumenCono(h);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Inicializar bus I2C forzando pines SDA (21) y SCL (22) del ESP32
+  Wire.begin(21, 22);
+
+  pinMode(PIN_TRIG, OUTPUT);
+  pinMode(PIN_ECHO, INPUT);
+  pinMode(PIN_BOTON, INPUT_PULLUP);
+
+  analogReadResolution(12);
+  analogSetAttenuation(ADC_11db);
+  digitalWrite(PIN_TRIG, LOW);
+
+  // Inicializar la pantalla LCD
+  lcd.init();                        
+  lcd.backlight(); 
+  
+  lcd.setCursor(0, 0);
+  lcd.print("Iniciando Sistema");
+  lcd.setCursor(0, 1);
+  lcd.print("Tarro Conico v1.0");
+  
+  Serial.println("=============================================");
+  Serial.println(" Sistema de Medicion de Volumen Iniciado");
+  Serial.println("=============================================");
+  
+  delay(2000);
+  lcd.clear();
+}
+
+void loop() {
+  // 1. Manejo del Botón con Anti-rebote
+  bool lecturaBoton = digitalRead(PIN_BOTON);
+  if (lecturaBoton != estadoBotonAnterior) {
+    ultimoDebounceTime = millis();
+  }
+
+  if ((millis() - ultimoDebounceTime) > DEBOUNCE_DELAY) {
+    static bool estadoBotonProcesado = HIGH;
+    if (lecturaBoton == LOW && estadoBotonProcesado == HIGH) {
+      if (modoActual == MODO_ULTRASONIDO) {
+        modoActual = MODO_INFRARROJO;
+      } else {
+        modoActual = MODO_ULTRASONIDO;
+      }
+      lcd.clear();
+      
+      Serial.println("\n---------------------------------------------");
+      Serial.print(">>> SENSOR CAMBIADO A: ");
+      Serial.println(modoActual == MODO_ULTRASONIDO ? "HC-SR04 (Ultrasonido)" : "GP2Y0A41SK0F (Infrarrojo Sharp)");
+      Serial.println("---------------------------------------------");
+    }
+    estadoBotonProcesado = lecturaBoton;
+  }
+  estadoBotonAnterior = lecturaBoton;
+
+  // 2. Adquisición y Muestra de Datos según el modo activo
+  if (modoActual == MODO_ULTRASONIDO) {
+    float tiempoMS, distCM, volumen;
+    medirHCSR04(tiempoMS, distCM, volumen);
+
+    // Mostrar en LCD 16x2
+    lcd.setCursor(0, 0);
+    lcd.print("HC: ");
+    lcd.print(distCM, 1);
+    lcd.print("cm  T:");
+    lcd.print((int)tiempoMS);
+    lcd.print("ms");
+
+    lcd.setCursor(0, 1);
+    lcd.print("Vol:");
+    lcd.print(volumen, 1);
+    lcd.print(" cm3     ");
+
+    // Mostrar en Monitor Serie
+    Serial.print("[ULTRASONIDO] Distancia: ");
+    Serial.print(distCM, 1);
+    Serial.print(" cm | Tiempo: ");
+    Serial.print(tiempoMS, 2);
+    Serial.print(" ms | Volumen: ");
+    Serial.print(volumen, 1);
+    Serial.println(" cm3");
+
+  } else {
+    float voltaje, distCM, volumen;
+    medirSharp(voltaje, distCM, volumen);
+
+    // Mostrar en LCD 16x2
+    lcd.setCursor(0, 0);
+    lcd.print("SHARP: ");
+    lcd.print(distCM, 1);
+    lcd.print("cm   ");
+
+    lcd.setCursor(0, 1);
+    lcd.print("Vol:");
+    lcd.print(volumen, 1);
+    lcd.print(" cm3     ");
+
+    // Mostrar en Monitor Serie
+    Serial.print("[SHARP IR] Voltaje: ");
+    Serial.print(voltaje, 3);
+    Serial.print(" V | Distancia: ");
+    Serial.print(distCM, 1);
+    Serial.print(" cm | Volumen: ");
+    Serial.print(volumen, 1);
+    Serial.println(" cm3");
+  }
+
+  delay(400); 
+}
